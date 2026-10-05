@@ -3,7 +3,7 @@ name: Build mod
 on:
   push:
   pull_request:
-  workflow_dispatch:   # ручной запуск кнопкой во вкладке Actions
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,33 +12,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Find project root
+        id: root
+        run: |
+          GRADLEW=$(find . -name gradlew -not -path "*/node_modules/*" | head -n 1)
+          if [ -z "$GRADLEW" ]; then
+            echo "gradlew не найден. Залей в репозиторий ВСЕ файлы проекта (gradlew, build.gradle, Fabric, NeoForge, Xplat)."
+            ls -R | head -50
+            exit 1
+          fi
+          DIR=$(dirname "$GRADLEW")
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Проект найден в: $DIR"
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Gradle (с кэшем)
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+        with:
+          build-root-directory: ${{ steps.root.outputs.dir }}
 
       - name: Build
-        run: ./gradlew build -x pmdMain -x pmdTest --stacktrace
+        working-directory: ${{ steps.root.outputs.dir }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build -x pmdMain -x pmdTest --stacktrace
 
       - name: Upload Fabric jar
         uses: actions/upload-artifact@v4
         with:
           name: Neat-Fabric
           path: |
-            Fabric/build/libs/*.jar
-            !Fabric/build/libs/*-sources.jar
+            ${{ steps.root.outputs.dir }}/Fabric/build/libs/*.jar
+            !${{ steps.root.outputs.dir }}/Fabric/build/libs/*-sources.jar
 
       - name: Upload NeoForge jar
         uses: actions/upload-artifact@v4
         with:
           name: Neat-NeoForge
           path: |
-            NeoForge/build/libs/*.jar
-            !NeoForge/build/libs/*-sources.jar
+            ${{ steps.root.outputs.dir }}/NeoForge/build/libs/*.jar
+            !${{ steps.root.outputs.dir }}/NeoForge/build/libs/*-sources.jar
